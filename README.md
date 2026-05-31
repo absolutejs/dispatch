@@ -3,6 +3,8 @@
 Provider-agnostic outbound message dispatcher for the AbsoluteJS
 ecosystem.
 
+**Docs:** [absolutejs.com/documentation/dispatch-overview](https://absolutejs.com/documentation/dispatch-overview)
+
 **What it is.** One factory (`createDispatcher`) returning a
 `Dispatcher` with three channels (`email` / `sms` / `push`). Adapters
 plug into each channel. The substrate around the adapters — metrics,
