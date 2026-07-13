@@ -119,5 +119,3 @@ export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
 		}
 	]
 });
-
-export default manifest;
