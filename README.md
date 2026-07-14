@@ -131,9 +131,12 @@ When `tracerProvider` is set, every send emits a
 
 - `abs.tenant` (when `message.tenant` is supplied)
 - `dispatch.channel` (`email` / `sms` / `push`)
-- `dispatch.provider` (the adapter's `name`)
-- `dispatch.recipient` (the `to` field; for email arrays, csv-joined)
+- `dispatch.provider` (the adapter name, updated to the result provider on success)
+- `dispatch.recipient_count` (addresses are intentionally excluded from spans)
 - `dispatch.message_id` (when the adapter returns one)
+
+Updating the provider from the result keeps broker/delegating adapters
+observable without leaking their routing implementation.
 
 Status `OK` on success; `ERROR` + `recordException` on failure.
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.0.3] — 2026-07-14
+
+- Align `@absolutejs/telemetry` with the current `^0.1.1` contract and remove
+  the redundant development declaration.
+- Replace raw `dispatch.recipient` span attributes with
+  `dispatch.recipient_count`, preventing email addresses, phone numbers, and
+  device tokens from becoming PII-bearing, unbounded telemetry dimensions.
+- Update `dispatch.provider` after a successful adapter result so brokered
+  adapters report the actual delegate provider.
+
 ## [0.0.1] — 2026-05-30
 
 Initial preview. Provider-agnostic outbound message dispatcher

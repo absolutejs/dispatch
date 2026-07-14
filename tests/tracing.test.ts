@@ -67,7 +67,7 @@ const makeCapturingTracerProvider = () => {
 };
 
 describe('dispatch 0.0.1 — OTel tracing', () => {
-	test('emits dispatch.email.send span with tenant + recipient + provider', async () => {
+	test('emits dispatch.email.send span with tenant + recipient count + provider', async () => {
 		const { provider, spans } = makeCapturingTracerProvider();
 		const dispatcher = createDispatcher({
 			email: memoryEmailAdapter(),
@@ -84,7 +84,8 @@ describe('dispatch 0.0.1 — OTel tracing', () => {
 		expect(span!.attrs[ABS_ATTRS.tenant]).toBe('tenant-A');
 		expect(span!.attrs['dispatch.channel']).toBe('email');
 		expect(span!.attrs['dispatch.provider']).toBe('memory');
-		expect(span!.attrs['dispatch.recipient']).toBe('alice@example.com');
+		expect(span!.attrs['dispatch.recipient_count']).toBe(1);
+		expect(span!.attrs['dispatch.recipient']).toBeUndefined();
 		expect(span!.attrs['dispatch.message_id']).toBe(result.id);
 		expect(span!.status?.code).toBe(1);
 		expect(span!.ended).toBe(true);
@@ -128,7 +129,7 @@ describe('dispatch 0.0.1 — OTel tracing', () => {
 		expect(names).toContain('dispatch.sms.send');
 	});
 
-	test('email "to" array surfaces as csv on dispatch.recipient', async () => {
+	test('email arrays expose only a privacy-safe recipient count', async () => {
 		const { provider, spans } = makeCapturingTracerProvider();
 		const dispatcher = createDispatcher({
 			email: memoryEmailAdapter(),
@@ -140,9 +141,23 @@ describe('dispatch 0.0.1 — OTel tracing', () => {
 			to: ['alice@example.com', 'bob@example.com']
 		});
 		const span = spans.find((s) => s.name === 'dispatch.email.send');
-		expect(span!.attrs['dispatch.recipient']).toBe(
-			'alice@example.com,bob@example.com'
-		);
+		expect(span!.attrs['dispatch.recipient_count']).toBe(2);
+		expect(span!.attrs['dispatch.recipient']).toBeUndefined();
+	});
+
+	test('successful delegated sends report the result provider', async () => {
+		const { provider, spans } = makeCapturingTracerProvider();
+		const delegated: EmailAdapter = {
+			name: 'brokered-email',
+			send: async () => ({ at: Date.now(), provider: 'resend' })
+		};
+		const dispatcher = createDispatcher({
+			email: delegated,
+			tracerProvider: provider
+		});
+		await dispatcher.email({ subject: 's', text: 't', to: 'a@b.c' });
+		const span = spans.find((s) => s.name === 'dispatch.email.send');
+		expect(span!.attrs['dispatch.provider']).toBe('resend');
 	});
 
 	test('without tracerProvider, dispatcher still works (noop)', async () => {

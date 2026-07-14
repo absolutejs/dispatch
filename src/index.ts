@@ -244,6 +244,15 @@ const recipientOf = (
 	return (message as SmsMessage | PushMessage).to;
 };
 
+const recipientCountOf = (
+	channel: DispatchChannel,
+	message: EmailMessage | SmsMessage | PushMessage
+): number => {
+	if (channel !== 'email') return 1;
+	const to = (message as EmailMessage).to;
+	return typeof to === 'string' ? 1 : to.length;
+};
+
 export const createDispatcher = (options: DispatcherOptions): Dispatcher => {
 	const clock = options.clock ?? Date.now;
 	const onError =
@@ -332,13 +341,14 @@ export const createDispatcher = (options: DispatcherOptions): Dispatcher => {
 					: {}),
 				'dispatch.channel': channel,
 				'dispatch.provider': adapter.name,
-				'dispatch.recipient': recipientOf(channel, message)
+				'dispatch.recipient_count': recipientCountOf(channel, message)
 			}
 		});
 		try {
 			const result = await runSend(adapter);
 			counters.sent += 1;
 			counters.byChannel[channel].sent += 1;
+			span.setAttribute('dispatch.provider', result.provider);
 			if (result.id !== undefined) {
 				span.setAttribute('dispatch.message_id', result.id);
 			}
