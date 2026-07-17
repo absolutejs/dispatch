@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.4] — 2026-07-17
+
+- Add privacy-safe push audit targets and prevent raw device tokens from
+  entering default failure logs or audit events.
+
 ## [0.0.3] — 2026-07-14
 
 - Align `@absolutejs/telemetry` with the current `^0.1.1` contract and remove
@@ -53,6 +58,7 @@ alongside this release.
 ### Tested
 
 22 tests across 2 files:
+
 - per-channel send (email / sms / push) round-trips through memory adapters
 - DispatchUnsupportedError on un-configured channel
 - defaultFrom + per-message override precedence

@@ -13,8 +13,8 @@ OTel, audit emission, error handling — is uniform.
 **What it solves.** Every package that needs to send a transactional
 message currently brings its own SMTP / SMS / push client.
 `@absolutejs/auth`'s magic-link routes assume the host emails the
-token. `@absolutejs/sync-pack-digest` explicitly says "*Host-supplied
-email sender. The pack does NOT own transport*". The control plane
+token. `@absolutejs/sync-pack-digest` explicitly says "_Host-supplied
+email sender. The pack does NOT own transport_". The control plane
 needs invoice-failed / quota-warning emails. Centralizing through one
 dispatcher means each consumer plugs into one place.
 
@@ -32,22 +32,22 @@ bun add @absolutejs/dispatch-twilio       # Twilio (SMS)
 ## Usage
 
 ```ts
-import { createDispatcher } from '@absolutejs/dispatch';
-import { createResendAdapter } from '@absolutejs/dispatch-resend';
-import { Resend } from 'resend';
+import { createDispatcher } from "@absolutejs/dispatch";
+import { createResendAdapter } from "@absolutejs/dispatch-resend";
+import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_KEY!);
 
 const dispatcher = createDispatcher({
   email: createResendAdapter({ client: resend }),
-  defaultFrom: { email: 'no-reply@acme.io' },
+  defaultFrom: { email: "no-reply@acme.io" },
 });
 
 await dispatcher.email({
-  to: 'alice@example.com',
-  subject: 'Welcome to Acme',
-  text: 'Hi Alice, click here to verify: ...',
-  tenant: 'tenant-A',  // optional — propagates to OTel + audit
+  to: "alice@example.com",
+  subject: "Welcome to Acme",
+  text: "Hi Alice, click here to verify: ...",
+  tenant: "tenant-A", // optional — propagates to OTel + audit
 });
 ```
 
@@ -62,8 +62,8 @@ type DispatcherOptions = {
   push?: PushAdapter;
   defaultFrom?: { email?: string; sms?: string };
   onError?: (error: unknown, channel: DispatchChannel, message) => void;
-  tracerProvider?: TracerProvider;   // OTel
-  audit?: AuditLike;                  // @absolutejs/audit instance
+  tracerProvider?: TracerProvider; // OTel
+  audit?: AuditLike; // @absolutejs/audit instance
 };
 ```
 
@@ -84,11 +84,11 @@ type EmailMessage = {
   bcc?: string | ReadonlyArray<string>;
   headers?: Record<string, string>;
   tenant?: string;
-  metadata?: Record<string, unknown>;  // adapter-specific extras
+  metadata?: Record<string, unknown>; // adapter-specific extras
 };
 
 type SmsMessage = {
-  to: string;          // E.164
+  to: string; // E.164
   from?: string;
   body: string;
   tenant?: string;
@@ -96,7 +96,7 @@ type SmsMessage = {
 };
 
 type PushMessage = {
-  to: string;          // device token OR topic
+  to: string; // device token OR topic
   title?: string;
   body: string;
   data?: Record<string, unknown>;
@@ -115,10 +115,16 @@ failure; `onError` fires before re-throw.
   sent: number;
   failed: number;
   byChannel: {
-    email: { sent, failed };
-    sms:   { sent, failed };
-    push:  { sent, failed };
-  };
+    email: {
+      sent, failed;
+    }
+    sms: {
+      sent, failed;
+    }
+    push: {
+      sent, failed;
+    }
+  }
 }
 ```
 

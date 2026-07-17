@@ -1,11 +1,11 @@
 {
-	"extends": "./tsconfig.json",
-	"compilerOptions": {
-		"emitDeclarationOnly": true,
-		"declaration": true,
-		"declarationMap": true,
-		"outDir": "dist"
-	},
-	"include": ["src/**/*"],
-	"exclude": ["tests/**/*"]
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["tests/**/*"]
 }
