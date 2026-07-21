@@ -15,6 +15,7 @@ describe("createDispatcher — basic per-channel send", () => {
     const adapter = memoryEmailAdapter();
     const dispatcher = createDispatcher({ email: adapter });
     const result = await dispatcher.email({
+      idempotencyKey: "email:welcome:alice",
       subject: "hello",
       text: "world",
       to: "alice@example.com",
@@ -23,6 +24,7 @@ describe("createDispatcher — basic per-channel send", () => {
     expect(result.id).toBeDefined();
     expect(adapter.inspect()).toHaveLength(1);
     expect(adapter.inspect()[0]!.to).toBe("alice@example.com");
+    expect(adapter.inspect()[0]!.idempotencyKey).toBe("email:welcome:alice");
     expect(dispatcher.metrics().sent).toBe(1);
     expect(dispatcher.metrics().byChannel.email.sent).toBe(1);
   });

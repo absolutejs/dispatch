@@ -82,6 +82,8 @@ export type AuditLike = {
 export type EmailMessage = {
   to: string | ReadonlyArray<string>;
   from?: string;
+  /** Stable provider idempotency key for retry-safe delivery. */
+  idempotencyKey?: string;
   subject: string;
   text?: string;
   html?: string;
