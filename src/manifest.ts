@@ -9,7 +9,7 @@ const tool = toolFactory<Dispatcher>();
  * tracerProvider / audit / clock are function-or-instance-valued → wiring
  * concerns, never settings. */
 export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
-  contract: 1,
+  contract: 2,
   identity: {
     accent: "#38bdf8",
     category: "messaging",
@@ -67,13 +67,28 @@ export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
   tools: {
     messaging_stats: tool.runtime({
       annotations: { readOnlyHint: true },
+      authorization: {
+        approval: "never",
+        audience: "authenticated",
+        effects: ["read"],
+        requiredScopes: ["messaging:read"],
+      },
       description:
         "Sent/failed counters per channel (email, sms, push) since the server started.",
       handler: (_input, dispatcher) => JSON.stringify(dispatcher.metrics()),
       input: Type.Object({}),
     }),
     send_email: tool.runtime({
-      annotations: { openWorldHint: true },
+      annotations: { idempotentHint: true, openWorldHint: true },
+      authorization: {
+        approval: "policy",
+        audience: "authenticated",
+        destinationFields: ["to"],
+        effects: ["send", "external-network"],
+        idempotency: { mode: "host" },
+        requiredScopes: ["messaging:send"],
+        reversible: false,
+      },
       description:
         "Send a transactional email through the configured provider. Reports the provider and tracking id.",
       handler: async (input, dispatcher) => {
@@ -88,7 +103,16 @@ export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
       }),
     }),
     send_sms: tool.runtime({
-      annotations: { openWorldHint: true },
+      annotations: { idempotentHint: true, openWorldHint: true },
+      authorization: {
+        approval: "policy",
+        audience: "authenticated",
+        destinationFields: ["to"],
+        effects: ["send", "external-network"],
+        idempotency: { mode: "host" },
+        requiredScopes: ["messaging:send"],
+        reversible: false,
+      },
       description:
         "Send a text message through the configured provider. `to` is an international-format phone number.",
       handler: async (input, dispatcher) => {
