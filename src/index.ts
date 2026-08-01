@@ -104,9 +104,9 @@ export type EmailMessage = {
 export type SmsMessage = {
   /** Messaging transport. Defaults to SMS. */
   channel?: "mms" | "rcs" | "sms" | "whatsapp";
-  /** E.164 phone number, or `whatsapp:+...` for WhatsApp. */
+  /** E.164 phone number, `whatsapp:+...`, or `rcs:<agent-id>`. */
   to: string;
-  /** E.164 origination phone number; adapters may set a default. */
+  /** E.164 origination number or channel-specific sender address. */
   from?: string;
   body?: string;
   /** Provider-hosted media URLs for MMS or channel media. */
@@ -120,6 +120,13 @@ export type SmsMessage = {
   sendAt?: string;
   /** Stable adapter idempotency key for retry-safe delivery. */
   idempotencyKey?: string;
+  /** Consent scope evaluated by an installed dispatch policy before sending. */
+  consent?: {
+    /** Stable sender/brand identity, not necessarily the provider address. */
+    senderId: string;
+    /** Message subject the recipient consented to, such as `incident-alerts`. */
+    topic: string;
+  };
   tenant?: string;
   metadata?: Record<string, unknown>;
 };
@@ -175,6 +182,35 @@ export type PushAdapter = {
   readonly name: string;
 };
 
+export type DispatchPolicyContext = {
+  adapter: string;
+  channel: DispatchChannel;
+  message: EmailMessage | SmsMessage | PushMessage;
+};
+
+export type DispatchPolicyDecision =
+  | { allowed: true }
+  | { allowed: false; code: string; reason: string };
+
+export type DispatchPolicy = {
+  readonly name: string;
+  evaluate: (
+    context: DispatchPolicyContext,
+  ) => DispatchPolicyDecision | Promise<DispatchPolicyDecision>;
+};
+
+export class DispatchPolicyDeniedError extends Error {
+  readonly code: string;
+  readonly policy: string;
+
+  constructor(input: { code: string; policy: string; reason: string }) {
+    super(`[dispatch] ${input.policy} denied send: ${input.reason}`);
+    this.name = "DispatchPolicyDeniedError";
+    this.code = input.code;
+    this.policy = input.policy;
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Dispatcher factory
 // -----------------------------------------------------------------------------
@@ -183,6 +219,8 @@ export type DispatcherOptions = {
   email?: EmailAdapter;
   sms?: SmsAdapter;
   push?: PushAdapter;
+  /** Ordered authorization policies evaluated before any provider call. */
+  policies?: ReadonlyArray<DispatchPolicy>;
   /**
    * Default `from` per channel. Consumers can override per message.
    * Adapters MAY enforce their own defaults if these aren't set
@@ -361,6 +399,20 @@ export const createDispatcher = (options: DispatcherOptions): Dispatcher => {
       },
     });
     try {
+      for (const policy of options.policies ?? []) {
+        const decision = await policy.evaluate({
+          adapter: adapter.name,
+          channel,
+          message,
+        });
+        if (!decision.allowed) {
+          throw new DispatchPolicyDeniedError({
+            code: decision.code,
+            policy: policy.name,
+            reason: decision.reason,
+          });
+        }
+      }
       const result = await runSend(adapter);
       counters.sent += 1;
       counters.byChannel[channel].sent += 1;

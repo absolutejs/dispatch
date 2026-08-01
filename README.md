@@ -60,6 +60,7 @@ type DispatcherOptions = {
   email?: EmailAdapter;
   sms?: SmsAdapter;
   push?: PushAdapter;
+  policies?: readonly DispatchPolicy[];
   defaultFrom?: { email?: string; sms?: string };
   onError?: (error: unknown, channel: DispatchChannel, message) => void;
   tracerProvider?: TracerProvider; // OTel
@@ -89,13 +90,14 @@ type EmailMessage = {
 
 type SmsMessage = {
   channel?: "sms" | "mms" | "whatsapp" | "rcs";
-  to: string; // E.164, or whatsapp:+...
+  to: string; // E.164, whatsapp:+..., or rcs:<agent-id>
   from?: string;
   body?: string;
   mediaUrls?: readonly string[];
   template?: { id: string; variables?: Readonly<Record<string, string>> };
   sendAt?: string;
   idempotencyKey?: string;
+  consent?: { senderId: string; topic: string };
   tenant?: string;
   metadata?: Record<string, unknown>;
 };
@@ -112,6 +114,25 @@ type PushMessage = {
 
 Returns `DispatchResult { id?, provider, at }`. Throws on adapter
 failure; `onError` fires before re-throw.
+
+### Pre-send authorization policies
+
+Policies run in order before the adapter or vendor receives a message and may
+perform durable asynchronous lookups. `@absolutejs/compliance` supplies a
+messaging-consent policy.
+
+```ts
+const dispatcher = createDispatcher({
+  policies: [messagingConsentPolicy],
+  sms,
+});
+
+await dispatcher.sms({
+  body: "Database latency is elevated",
+  consent: { senderId: "acme", topic: "incident-alerts" },
+  to: "+12025550100",
+});
+```
 
 ### `dispatcher.metrics()`
 

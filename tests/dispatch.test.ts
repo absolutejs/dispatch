@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   consoleEmailAdapter,
   createDispatcher,
+  DispatchPolicyDeniedError,
   DispatchUnsupportedError,
   memoryEmailAdapter,
   memoryPushAdapter,
@@ -91,6 +92,39 @@ describe("createDispatcher — basic per-channel send", () => {
       to: "a@b.c",
     });
     expect(adapter.inspect()[0]!.from).toBe("support@example.com");
+  });
+});
+
+describe("dispatch policies", () => {
+  test("deny a send before the adapter is called", async () => {
+    const adapter = memorySmsAdapter();
+    const dispatcher = createDispatcher({
+      policies: [
+        {
+          evaluate: ({ message }) =>
+            "consent" in message && message.consent?.topic === "alerts"
+              ? { allowed: true }
+              : {
+                  allowed: false,
+                  code: "missing-consent-scope",
+                  reason: "alerts require a consent scope",
+                },
+          name: "messaging-consent",
+        },
+      ],
+      sms: adapter,
+    });
+
+    await expect(
+      dispatcher.sms({ body: "Incident opened", to: "+12025550100" }),
+    ).rejects.toBeInstanceOf(DispatchPolicyDeniedError);
+    expect(adapter.inspect()).toHaveLength(0);
+    await dispatcher.sms({
+      body: "Incident opened",
+      consent: { senderId: "acme", topic: "alerts" },
+      to: "+12025550100",
+    });
+    expect(adapter.inspect()).toHaveLength(1);
   });
 });
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.0] — 2026-08-01
+
+- Add ordered asynchronous authorization policies evaluated before providers.
+- Add typed policy denials and messaging consent scopes.
+- Document channel-specific WhatsApp and RCS addresses.
+
 ## [0.0.4] — 2026-07-17
 
 - Add privacy-safe push audit targets and prevent raw device tokens from
