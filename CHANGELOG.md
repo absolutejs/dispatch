@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.3
+
+- Register the existing APNs and FCM implementations in the discoverable push
+  adapter slot.
+
 ## 0.6.2
 
 - Add `@absolutejs/dispatch-sinch` to the discoverable messaging adapter

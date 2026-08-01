@@ -62,6 +62,7 @@ export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
       configPath: "push",
       contract: "dispatch/push-adapter",
       description: "Who delivers your push notifications",
+      known: ["@absolutejs/dispatch-apns", "@absolutejs/dispatch-fcm"],
     },
     messaging: {
       configPath: "messaging",
