@@ -69,6 +69,8 @@ export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
       contract: "dispatch/messaging-adapter",
       description: "Who delivers carrier and rich-channel messages",
       known: [
+        "@absolutejs/dispatch-aws-end-user-messaging",
+        "@absolutejs/dispatch-infobip",
         "@absolutejs/dispatch-sinch",
         "@absolutejs/dispatch-telnyx",
         "@absolutejs/dispatch-twilio",

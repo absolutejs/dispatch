@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.1 — 2026-08-01
+
+- Finalize fenced push fanout claims so ambiguous terminal delivery failures are
+  recorded as indeterminate and cannot be silently retried into duplicate sends.
+
+## 0.7.0 — 2026-08-01
+
+- Add a provider-neutral push device lifecycle with tenant-safe registration,
+  user/device/topic targeting, bounded retries and concurrency, invalid-token
+  retirement, and fenced idempotent fanout with indeterminate outcomes.
+- Add portable push actions, badges, sounds, deep links, and idempotency keys.
+- Discover AWS End User Messaging and Infobip messaging adapters.
+
 ## 0.6.3
 
 - Register the existing APNs and FCM implementations in the discoverable push

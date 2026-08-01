@@ -136,11 +136,61 @@ type PushMessage = {
   to: string; // device token OR topic
   title?: string;
   body: string;
+  idempotencyKey?: string;
+  actions?: ReadonlyArray<{ id: string; label: string; deepLink?: string }>;
+  badge?: number;
+  deepLink?: string;
+  sound?: string;
   data?: Record<string, unknown>;
   tenant?: string;
   metadata?: Record<string, unknown>;
 };
 ```
+
+### Production push lifecycle
+
+`createPushLifecycle()` owns the provider-neutral device layer above APNs and
+FCM: tenant-isolated registration, user/device/topic targeting, bounded
+concurrency, retries, invalid-token retirement, and idempotent fanout. Resolve
+the adapter per subscription to support tenant-specific credentials.
+
+```ts
+import { createPushLifecycle } from "@absolutejs/dispatch";
+import {
+  createPostgresPushFanoutClaimStore,
+  createPostgresPushSubscriptionStore,
+} from "@absolutejs/dispatch-push-postgres";
+
+const push = createPushLifecycle({
+  adapterFor: ({ platform, tenant }) => adapters.forTenant(tenant, platform),
+  claimStore: createPostgresPushFanoutClaimStore(idempotentOperations),
+  store: createPostgresPushSubscriptionStore(transactionRunner),
+});
+
+await push.register({
+  deviceId: "iphone-15",
+  platform: "apns",
+  tenant: "acme",
+  token,
+  topics: ["incidents"],
+  userId: "user-42",
+});
+
+await push.send(
+  { tenant: "acme", topic: "incidents" },
+  {
+    body: "Database latency is elevated",
+    deepLink: "absolute://incidents/42",
+    idempotencyKey: "incident-42:opened",
+    sound: "default",
+    title: "Production alert",
+  },
+);
+```
+
+Ambiguous provider failures are recorded as `indeterminate` instead of being
+silently retried after a lease expires. This prevents a crashed worker from
+double-delivering a notification whose provider acknowledgement was lost.
 
 Returns `MessagingDispatchResult { id?, provider, at, delivery }`. The
 `delivery` record carries the requested and actual transports plus normalized

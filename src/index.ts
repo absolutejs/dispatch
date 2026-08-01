@@ -188,6 +188,13 @@ export type MessagingMessage = {
   metadata?: Record<string, unknown>;
 };
 
+export type PushAction = {
+  id: string;
+  label: string;
+  /** Optional app route or HTTPS URL opened by this action. */
+  deepLink?: string;
+};
+
 export type PushMessage = {
   /**
    * Device token (FCM/APNs) OR topic name. Adapter decides the
@@ -196,6 +203,12 @@ export type PushMessage = {
   to: string;
   title?: string;
   body: string;
+  /** Stable key used by lifecycle fanout and providers that support collapse/deduplication. */
+  idempotencyKey?: string;
+  actions?: ReadonlyArray<PushAction>;
+  badge?: number;
+  deepLink?: string;
+  sound?: string;
   /** Free-form data payload sent alongside the notification. */
   data?: Record<string, unknown>;
   /**
@@ -852,3 +865,5 @@ export const consolePushAdapter = (
     },
   };
 };
+
+export * from "./push";
