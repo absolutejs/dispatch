@@ -104,7 +104,7 @@ export type EmailMessage = {
 export type SmsMessage = {
   /** Messaging transport. Defaults to SMS. */
   channel?: "mms" | "rcs" | "sms" | "whatsapp";
-  /** E.164 phone number, `whatsapp:+...`, or `rcs:<agent-id>`. */
+  /** E.164 phone number, `whatsapp:+...`, or `rcs:+...` to require RCS. */
   to: string;
   /** E.164 origination number or channel-specific sender address. */
   from?: string;
@@ -115,6 +115,13 @@ export type SmsMessage = {
   template?: {
     id: string;
     variables?: Readonly<Record<string, string>>;
+  };
+  /** RCS delivery behavior. Omit to let the provider fall back to SMS/MMS. */
+  rcs?: {
+    /** Disable fallback to SMS/MMS when the recipient cannot receive RCS. */
+    fallback?: "automatic" | "disabled";
+    /** E.164 sender used for automatic SMS/MMS fallback. */
+    fallbackFrom?: string;
   };
   /** ISO-8601 delivery time for providers that support native scheduling. */
   sendAt?: string;

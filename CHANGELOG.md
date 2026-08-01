@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Model RCS fallback behavior and fallback sender without provider-specific metadata.
+- Correct the RCS recipient address contract to use `rcs:+E164` for required-RCS delivery.
+
 ## [0.3.0] — 2026-08-01
 
 - Add ordered asynchronous authorization policies evaluated before providers.

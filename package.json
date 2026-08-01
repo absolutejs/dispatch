@@ -1,6 +1,6 @@
 {
   "name": "@absolutejs/dispatch",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Provider-agnostic outbound message dispatcher for the AbsoluteJS ecosystem. Email / SMS / push behind one substrate-shaped factory; pluggable adapters live in @absolutejs/dispatch-adapters/*. Bundled memory + console adapters for tests + dev. Substrate pattern: metrics(), OTel via @absolutejs/telemetry, optional audit emission via @absolutejs/audit.",
   "repository": {
     "type": "git",

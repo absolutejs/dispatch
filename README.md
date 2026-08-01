@@ -90,11 +90,12 @@ type EmailMessage = {
 
 type SmsMessage = {
   channel?: "sms" | "mms" | "whatsapp" | "rcs";
-  to: string; // E.164, whatsapp:+..., or rcs:<agent-id>
+  to: string; // E.164, whatsapp:+..., or rcs:+... to require RCS
   from?: string;
   body?: string;
   mediaUrls?: readonly string[];
   template?: { id: string; variables?: Readonly<Record<string, string>> };
+  rcs?: { fallback?: "automatic" | "disabled"; fallbackFrom?: string };
   sendAt?: string;
   idempotencyKey?: string;
   consent?: { senderId: string; topic: string };
