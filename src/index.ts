@@ -127,12 +127,19 @@ export type SmsMessage = {
   sendAt?: string;
   /** Stable adapter idempotency key for retry-safe delivery. */
   idempotencyKey?: string;
+  /** Provider retention controls for message content and addressing data. */
+  privacy?: {
+    addressRetention?: "obfuscate" | "retain";
+    contentRetention?: "discard" | "retain";
+  };
   /** Consent scope evaluated by an installed dispatch policy before sending. */
   consent?: {
-    /** Stable sender/brand identity, not necessarily the provider address. */
-    senderId: string;
-    /** Message subject the recipient consented to, such as `incident-alerts`. */
-    topic: string;
+    /** Stable messaging program identity across provider accounts and sender pools. */
+    programId: string;
+    /** Consent purpose, such as `incident-alerts` or `login-verification`. */
+    purpose: string;
+    /** Every transport that may ultimately deliver the message, including fallbacks. */
+    deliveryTransports: ReadonlyArray<"mms" | "rcs" | "sms" | "whatsapp">;
   };
   tenant?: string;
   metadata?: Record<string, unknown>;

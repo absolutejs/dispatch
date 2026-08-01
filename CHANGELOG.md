@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0
+
+- Add provider-neutral retention controls for message content and addresses.
+- Replace sender/topic consent with stable program/purpose consent and require every possible delivery route.
+
 ## 0.3.1
 
 - Model RCS fallback behavior and fallback sender without provider-specific metadata.

@@ -102,7 +102,7 @@ describe("dispatch policies", () => {
       policies: [
         {
           evaluate: ({ message }) =>
-            "consent" in message && message.consent?.topic === "alerts"
+            "consent" in message && message.consent?.purpose === "alerts"
               ? { allowed: true }
               : {
                   allowed: false,
@@ -121,7 +121,11 @@ describe("dispatch policies", () => {
     expect(adapter.inspect()).toHaveLength(0);
     await dispatcher.sms({
       body: "Incident opened",
-      consent: { senderId: "acme", topic: "alerts" },
+      consent: {
+        deliveryTransports: ["sms"],
+        programId: "acme-alerts",
+        purpose: "alerts",
+      },
       to: "+12025550100",
     });
     expect(adapter.inspect()).toHaveLength(1);

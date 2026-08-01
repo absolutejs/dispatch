@@ -98,7 +98,15 @@ type SmsMessage = {
   rcs?: { fallback?: "automatic" | "disabled"; fallbackFrom?: string };
   sendAt?: string;
   idempotencyKey?: string;
-  consent?: { senderId: string; topic: string };
+  privacy?: {
+    addressRetention?: "obfuscate" | "retain";
+    contentRetention?: "discard" | "retain";
+  };
+  consent?: {
+    programId: string;
+    purpose: string;
+    deliveryTransports: readonly ("sms" | "mms" | "rcs" | "whatsapp")[];
+  };
   tenant?: string;
   metadata?: Record<string, unknown>;
 };
