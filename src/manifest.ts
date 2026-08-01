@@ -67,7 +67,11 @@ export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
       configPath: "messaging",
       contract: "dispatch/messaging-adapter",
       description: "Who delivers carrier and rich-channel messages",
-      known: ["@absolutejs/dispatch-telnyx", "@absolutejs/dispatch-twilio"],
+      known: [
+        "@absolutejs/dispatch-telnyx",
+        "@absolutejs/dispatch-twilio",
+        "@absolutejs/dispatch-vonage",
+      ],
     },
   },
   tools: {

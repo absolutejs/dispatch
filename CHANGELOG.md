@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1
+
+- Add `@absolutejs/dispatch-vonage` to the discoverable messaging adapter
+  registry now that the provider package is published.
+
 ## 0.6.0
 
 - Add an adapter-extensible `MessagingTransportRegistry` so new provider
