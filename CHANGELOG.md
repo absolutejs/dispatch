@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0
+
+- Add an adapter-extensible `MessagingTransportRegistry` so new provider
+  channels do not require a Dispatch core release.
+- Add normalized delivery, inbound, and consent events with carrier economics,
+  failure, network, interaction, and provider-account fields.
+- Add typed delivery-attempt history and provider-neutral scheduling,
+  readiness, and registration capability contracts.
+- Return `MessagingDispatchResult` from messaging adapters and remove the
+  shallow requested/actual/fallback flags from the channel-neutral result.
+
 ## 0.5.0
 
 - Replace the SMS-named adapter and dispatcher surface with provider-neutral

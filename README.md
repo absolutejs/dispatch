@@ -142,7 +142,9 @@ type PushMessage = {
 };
 ```
 
-Returns `DispatchResult { id?, provider, at, requestedTransport?, actualTransport?, fallbackAttempted? }`. Throws on adapter
+Returns `MessagingDispatchResult { id?, provider, at, delivery }`. The
+`delivery` record carries the requested and actual transports plus normalized
+primary/fallback attempts. Throws on adapter
 failure; `onError` fires before re-throw.
 
 ### Pre-send authorization policies

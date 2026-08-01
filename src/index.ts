@@ -101,7 +101,22 @@ export type EmailMessage = {
   metadata?: Record<string, unknown>;
 };
 
-export type MessagingTransport = "mms" | "rcs" | "sms" | "whatsapp";
+/**
+ * Adapter packages extend this registry through module augmentation. This
+ * keeps core exhaustive for its built-in transports without forcing a core
+ * release whenever a provider introduces another channel.
+ */
+export interface MessagingTransportRegistry {
+  mms: { family: "carrier" };
+  rcs: { family: "rich" };
+  sms: { family: "carrier" };
+  whatsapp: { family: "ott" };
+}
+
+export type MessagingTransport = Extract<
+  keyof MessagingTransportRegistry,
+  string
+>;
 
 export type MessagingEndpoint = {
   address: string;
@@ -139,7 +154,7 @@ export type MessagingContent =
 export type MessagingFallbackRoute = {
   content?: MessagingContent;
   from?: MessagingEndpoint;
-  transport: Exclude<MessagingTransport, "rcs">;
+  transport: MessagingTransport;
 };
 
 export type MessagingMessage = {
@@ -203,9 +218,127 @@ export type DispatchResult = {
   id?: string;
   provider: string;
   at: number;
-  requestedTransport?: MessagingTransport;
+};
+
+export type MessagingDeliveryStatus =
+  | "accepted"
+  | "canceled"
+  | "delivered"
+  | "expired"
+  | "failed"
+  | "queued"
+  | "read"
+  | "scheduled"
+  | "sending"
+  | "sent"
+  | "undeliverable"
+  | "unknown";
+
+export type MessagingFailure = {
+  code?: string;
+  detail?: string;
+  title?: string;
+};
+
+export type MessagingEconomics = {
+  currency: string;
+  price: string;
+  segments?: number;
+};
+
+export type MessagingDeliveryAttempt = {
   actualTransport?: MessagingTransport;
-  fallbackAttempted?: boolean;
+  errors?: ReadonlyArray<MessagingFailure>;
+  providerMessageId?: string;
+  providerStatus?: string;
+  route: "primary" | { fallbackIndex: number };
+  status: MessagingDeliveryStatus;
+  transport: MessagingTransport;
+};
+
+export type MessagingDispatchResult = DispatchResult & {
+  delivery: {
+    actualTransport?: MessagingTransport;
+    attempts: ReadonlyArray<MessagingDeliveryAttempt>;
+    requestedTransport: MessagingTransport;
+  };
+};
+
+export type MessagingEventBase = {
+  actualTransport?: MessagingTransport;
+  eventId: string;
+  from?: MessagingEndpoint;
+  messageId: string;
+  occurredAt: number;
+  provider: string;
+  providerAccountId?: string;
+  requestedTransport?: MessagingTransport;
+  tenant?: string;
+  to?: MessagingEndpoint;
+};
+
+export type MessagingDeliveryEvent = MessagingEventBase & {
+  attempt?: MessagingDeliveryAttempt;
+  economics?: MessagingEconomics;
+  errors: ReadonlyArray<MessagingFailure>;
+  kind: "delivery";
+  networkCode?: string;
+  providerStatus: string;
+  status: MessagingDeliveryStatus;
+};
+
+export type MessagingInboundEvent = MessagingEventBase & {
+  content: MessagingContent;
+  interaction?: {
+    label?: string;
+    payload: string;
+  };
+  kind: "inbound";
+};
+
+export type MessagingConsentEvent = MessagingEventBase & {
+  action: "grant" | "help" | "revoke";
+  keyword?: string;
+  kind: "consent";
+};
+
+export type MessagingEvent =
+  | MessagingConsentEvent
+  | MessagingDeliveryEvent
+  | MessagingInboundEvent;
+
+export type MessagingEventHandler = (
+  event: MessagingEvent,
+) => Promise<void> | void;
+
+export type MessagingCapabilityCheck = {
+  detail: string;
+  id: string;
+  status: "fail" | "pass" | "pending";
+};
+
+export type MessagingCapabilityReport = {
+  checks: ReadonlyArray<MessagingCapabilityCheck>;
+  ready: boolean;
+};
+
+export type MessagingScheduledMessageReport = {
+  messageId: string;
+  providerStatus: string;
+  state: "canceled" | "failed" | "pending" | "sent";
+};
+
+export type MessagingSchedulingCapability = {
+  cancel: (messageId: string) => Promise<MessagingScheduledMessageReport>;
+  inspect: (messageId: string) => Promise<MessagingScheduledMessageReport>;
+};
+
+export type MessagingReadinessCapability = {
+  inspect: () => Promise<MessagingCapabilityReport>;
+};
+
+export type MessagingRegistrationCapability<Input = unknown> = {
+  inspect: (input: Input) => Promise<MessagingCapabilityReport>;
 };
 
 // -----------------------------------------------------------------------------
@@ -218,7 +351,11 @@ export type EmailAdapter = {
 };
 
 export type MessagingAdapter = {
-  send: (message: MessagingMessage) => Promise<DispatchResult>;
+  capabilities?: {
+    readiness?: MessagingReadinessCapability;
+    scheduling?: MessagingSchedulingCapability;
+  };
+  send: (message: MessagingMessage) => Promise<MessagingDispatchResult>;
   readonly name: string;
 };
 
@@ -313,7 +450,7 @@ export type DispatcherMetrics = {
 
 export type Dispatcher = {
   email: (message: EmailMessage) => Promise<DispatchResult>;
-  messaging: (message: MessagingMessage) => Promise<DispatchResult>;
+  messaging: (message: MessagingMessage) => Promise<MessagingDispatchResult>;
   push: (message: PushMessage) => Promise<DispatchResult>;
   metrics: () => DispatcherMetrics;
 };
@@ -426,14 +563,15 @@ export const createDispatcher = (options: DispatcherOptions): Dispatcher => {
 
   const dispatch = async <
     M extends EmailMessage | MessagingMessage | PushMessage,
+    R extends DispatchResult,
   >(
     channel: DispatchChannel,
     message: M,
     adapter: EmailAdapter | MessagingAdapter | PushAdapter | undefined,
     runSend: (
       adapter: EmailAdapter | MessagingAdapter | PushAdapter,
-    ) => Promise<DispatchResult>,
-  ): Promise<DispatchResult> => {
+    ) => Promise<R>,
+  ): Promise<R> => {
     if (adapter === undefined) {
       throw new DispatchUnsupportedError(channel);
     }
@@ -599,7 +737,24 @@ export const memoryMessagingAdapter = (
       const at = Date.now();
       sent.push({ ...message, at, id });
       while (sent.length > max) sent.shift();
-      return { at, id, provider: "memory" };
+      return {
+        at,
+        delivery: {
+          actualTransport: message.to.transport,
+          attempts: [
+            {
+              actualTransport: message.to.transport,
+              providerMessageId: id,
+              route: "primary",
+              status: "accepted",
+              transport: message.to.transport,
+            },
+          ],
+          requestedTransport: message.to.transport,
+        },
+        id,
+        provider: "memory",
+      };
     },
   };
 };
@@ -663,7 +818,22 @@ export const consoleMessagingAdapter = (
       const out = JSON.stringify({ channel: "messaging", message }, null, 2);
       if (stream === "error") console.error(out);
       else console.log(out);
-      return { at: Date.now(), provider: "console" };
+      return {
+        at: Date.now(),
+        delivery: {
+          actualTransport: message.to.transport,
+          attempts: [
+            {
+              actualTransport: message.to.transport,
+              route: "primary",
+              status: "accepted",
+              transport: message.to.transport,
+            },
+          ],
+          requestedTransport: message.to.transport,
+        },
+        provider: "console",
+      };
     },
   };
 };
