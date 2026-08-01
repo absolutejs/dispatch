@@ -88,9 +88,14 @@ type EmailMessage = {
 };
 
 type SmsMessage = {
-  to: string; // E.164
+  channel?: "sms" | "mms" | "whatsapp" | "rcs";
+  to: string; // E.164, or whatsapp:+...
   from?: string;
-  body: string;
+  body?: string;
+  mediaUrls?: readonly string[];
+  template?: { id: string; variables?: Readonly<Record<string, string>> };
+  sendAt?: string;
+  idempotencyKey?: string;
   tenant?: string;
   metadata?: Record<string, unknown>;
 };

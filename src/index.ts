@@ -102,11 +102,24 @@ export type EmailMessage = {
 };
 
 export type SmsMessage = {
-  /** E.164 phone number (`+12025550100`). */
+  /** Messaging transport. Defaults to SMS. */
+  channel?: "mms" | "rcs" | "sms" | "whatsapp";
+  /** E.164 phone number, or `whatsapp:+...` for WhatsApp. */
   to: string;
   /** E.164 origination phone number; adapters may set a default. */
   from?: string;
-  body: string;
+  body?: string;
+  /** Provider-hosted media URLs for MMS or channel media. */
+  mediaUrls?: ReadonlyArray<string>;
+  /** Provider-neutral template reference and variables. */
+  template?: {
+    id: string;
+    variables?: Readonly<Record<string, string>>;
+  };
+  /** ISO-8601 delivery time for providers that support native scheduling. */
+  sendAt?: string;
+  /** Stable adapter idempotency key for retry-safe delivery. */
+  idempotencyKey?: string;
   tenant?: string;
   metadata?: Record<string, unknown>;
 };
