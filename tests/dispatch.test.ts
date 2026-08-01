@@ -6,7 +6,7 @@ import {
   DispatchUnsupportedError,
   memoryEmailAdapter,
   memoryPushAdapter,
-  memorySmsAdapter,
+  memoryMessagingAdapter,
   type AuditLike,
   type EmailAdapter,
 } from "../src/index";
@@ -30,15 +30,18 @@ describe("createDispatcher — basic per-channel send", () => {
     expect(dispatcher.metrics().byChannel.email.sent).toBe(1);
   });
 
-  test("sms round-trips through the memory adapter", async () => {
-    const adapter = memorySmsAdapter();
-    const dispatcher = createDispatcher({ sms: adapter });
-    await dispatcher.sms({
-      body: "pin: 482910",
-      to: "+12025550100",
+  test("messaging round-trips through the memory adapter", async () => {
+    const adapter = memoryMessagingAdapter();
+    const dispatcher = createDispatcher({ messaging: adapter });
+    await dispatcher.messaging({
+      content: { kind: "text", text: "pin: 482910" },
+      to: { address: "+12025550100", transport: "sms" },
     });
     expect(adapter.inspect()).toHaveLength(1);
-    expect(adapter.inspect()[0]!.body).toBe("pin: 482910");
+    expect(adapter.inspect()[0]!.content).toEqual({
+      kind: "text",
+      text: "pin: 482910",
+    });
   });
 
   test("push round-trips through the memory adapter", async () => {
@@ -58,7 +61,10 @@ describe("createDispatcher — basic per-channel send", () => {
       dispatcher.email({ subject: "s", text: "t", to: "a@b.c" }),
     ).rejects.toBeInstanceOf(DispatchUnsupportedError);
     await expect(
-      dispatcher.sms({ body: "b", to: "+1" }),
+      dispatcher.messaging({
+        content: { kind: "text", text: "b" },
+        to: { address: "+1", transport: "sms" },
+      }),
     ).rejects.toBeInstanceOf(DispatchUnsupportedError);
     await expect(
       dispatcher.push({ body: "b", to: "token" }),
@@ -97,7 +103,7 @@ describe("createDispatcher — basic per-channel send", () => {
 
 describe("dispatch policies", () => {
   test("deny a send before the adapter is called", async () => {
-    const adapter = memorySmsAdapter();
+    const adapter = memoryMessagingAdapter();
     const dispatcher = createDispatcher({
       policies: [
         {
@@ -112,21 +118,23 @@ describe("dispatch policies", () => {
           name: "messaging-consent",
         },
       ],
-      sms: adapter,
+      messaging: adapter,
     });
 
     await expect(
-      dispatcher.sms({ body: "Incident opened", to: "+12025550100" }),
+      dispatcher.messaging({
+        content: { kind: "text", text: "Incident opened" },
+        to: { address: "+12025550100", transport: "sms" },
+      }),
     ).rejects.toBeInstanceOf(DispatchPolicyDeniedError);
     expect(adapter.inspect()).toHaveLength(0);
-    await dispatcher.sms({
-      body: "Incident opened",
+    await dispatcher.messaging({
+      content: { kind: "text", text: "Incident opened" },
       consent: {
-        deliveryTransports: ["sms"],
         programId: "acme-alerts",
         purpose: "alerts",
       },
-      to: "+12025550100",
+      to: { address: "+12025550100", transport: "sms" },
     });
     expect(adapter.inspect()).toHaveLength(1);
   });
@@ -279,17 +287,20 @@ describe("metrics()", () => {
     const dispatcher = createDispatcher({
       email: memoryEmailAdapter(),
       push: memoryPushAdapter(),
-      sms: memorySmsAdapter(),
+      messaging: memoryMessagingAdapter(),
     });
     await dispatcher.email({ subject: "s", text: "t", to: "a@b.c" });
     await dispatcher.email({ subject: "s", text: "t", to: "b@b.c" });
-    await dispatcher.sms({ body: "b", to: "+1" });
+    await dispatcher.messaging({
+      content: { kind: "text", text: "b" },
+      to: { address: "+1", transport: "sms" },
+    });
     await dispatcher.push({ body: "b", to: "token" });
     const m = dispatcher.metrics();
     expect(m.sent).toBe(4);
     expect(m.failed).toBe(0);
     expect(m.byChannel.email.sent).toBe(2);
-    expect(m.byChannel.sms.sent).toBe(1);
+    expect(m.byChannel.messaging.sent).toBe(1);
     expect(m.byChannel.push.sent).toBe(1);
   });
 

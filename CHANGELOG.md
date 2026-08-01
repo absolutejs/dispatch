@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0
+
+- Replace the SMS-named adapter and dispatcher surface with provider-neutral
+  `MessagingMessage`, `MessagingAdapter`, and `dispatcher.messaging()` contracts.
+- Add typed endpoints, discriminated content, ordered fallback routes, portable
+  rich actions, provider extensions, and requested/actual transport results.
+- Derive consent transports from the declared delivery routes so callers cannot
+  accidentally authorize fewer transports than the provider may use.
+- Remove the legacy SMS aliases rather than carrying an ambiguous compatibility layer.
+
 ## 0.4.0
 
 - Add provider-neutral retention controls for message content and addresses.
@@ -43,9 +53,9 @@ addressing G4 from the deep-research audit.
 - **Three channels**: `email` / `sms` / `push` — each takes an
   adapter implementing `send(message): Promise<DispatchResult>`.
 - **Bundled adapters** in core: `memoryEmailAdapter` /
-  `memorySmsAdapter` / `memoryPushAdapter` (in-process FIFO tail with
+  `memoryMessagingAdapter` / `memoryPushAdapter` (in-process FIFO tail with
   `inspect()` + `clear()`) and `consoleEmailAdapter` /
-  `consoleSmsAdapter` / `consolePushAdapter` (JSON-per-line stdout for
+  `consoleMessagingAdapter` / `consolePushAdapter` (JSON-per-line stdout for
   dev).
 - **`DispatchUnsupportedError`** thrown when calling an
   un-configured channel.

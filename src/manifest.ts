@@ -5,7 +5,7 @@ import type { Dispatcher, DispatcherOptions } from "./index";
 const tool = toolFactory<Dispatcher>();
 
 /* Serializable subset of DispatcherOptions: defaultFrom only. The channel
- * adapters (email/sms/push) are instance-valued → slots; onError /
+ * adapters (email/messaging/push) are instance-valued → slots; onError /
  * tracerProvider / audit / clock are function-or-instance-valued → wiring
  * concerns, never settings. */
 export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
@@ -32,12 +32,18 @@ export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
               title: "Default email sender",
             }),
           ),
-          sms: Type.Optional(
-            Type.String({
-              description:
-                "The phone number texts are sent from, in international format.",
-              examples: ["+12025550100"],
-              title: "Default text-message number",
+          messaging: Type.Optional(
+            Type.Object({
+              address: Type.String({
+                description: "Default provider-approved sender address.",
+                examples: ["+12025550100"],
+              }),
+              transport: Type.Union([
+                Type.Literal("sms"),
+                Type.Literal("mms"),
+                Type.Literal("rcs"),
+                Type.Literal("whatsapp"),
+              ]),
             }),
           ),
         },
@@ -57,11 +63,11 @@ export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
       contract: "dispatch/push-adapter",
       description: "Who delivers your push notifications",
     },
-    sms: {
-      configPath: "sms",
-      contract: "dispatch/sms-adapter",
-      description: "Who delivers your text messages",
-      known: ["@absolutejs/dispatch-twilio"],
+    messaging: {
+      configPath: "messaging",
+      contract: "dispatch/messaging-adapter",
+      description: "Who delivers carrier and rich-channel messages",
+      known: ["@absolutejs/dispatch-telnyx", "@absolutejs/dispatch-twilio"],
     },
   },
   tools: {
@@ -74,7 +80,7 @@ export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
         requiredScopes: ["messaging:read"],
       },
       description:
-        "Sent/failed counters per channel (email, sms, push) since the server started.",
+        "Sent/failed counters per channel (email, messaging, push) since the server started.",
       handler: (_input, dispatcher) => JSON.stringify(dispatcher.metrics()),
       input: Type.Object({}),
     }),
@@ -102,7 +108,7 @@ export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
         to: Type.String({ format: "email" }),
       }),
     }),
-    send_sms: tool.runtime({
+    send_messaging: tool.runtime({
       annotations: { idempotentHint: true, openWorldHint: true },
       authorization: {
         approval: "policy",
@@ -116,13 +122,17 @@ export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
       description:
         "Send a text message through the configured provider. `to` is an international-format phone number.",
       handler: async (input, dispatcher) => {
-        const result = await dispatcher.sms(input);
+        const result = await dispatcher.messaging({
+          content: { kind: "text", text: input.text },
+          to: { address: input.to, transport: input.transport },
+        });
 
         return `sent via ${result.provider}${result.id === undefined ? "" : ` (id ${result.id})`}`;
       },
       input: Type.Object({
-        body: Type.String({ minLength: 1 }),
+        text: Type.String({ minLength: 1 }),
         to: Type.String({ pattern: "^\\+[0-9]{7,15}$" }),
+        transport: Type.Union([Type.Literal("sms"), Type.Literal("mms")]),
       }),
     }),
   },
@@ -130,7 +140,7 @@ export const manifest = defineManifest<DispatcherOptions, Dispatcher>()({
     {
       id: "default",
       server: {
-        code: "const dispatcher = createDispatcher({ email: ${slot.email}, push: ${slot.push}, sms: ${slot.sms}, ...${settings} });",
+        code: "const dispatcher = createDispatcher({ email: ${slot.email}, messaging: ${slot.messaging}, push: ${slot.push}, ...${settings} });",
         imports: [
           { from: "@absolutejs/dispatch", names: ["createDispatcher"] },
         ],

@@ -9,7 +9,7 @@ import {
 import {
   createDispatcher,
   memoryEmailAdapter,
-  memorySmsAdapter,
+  memoryMessagingAdapter,
   type EmailAdapter,
 } from "../src/index";
 
@@ -118,14 +118,17 @@ describe("dispatch 0.0.1 — OTel tracing", () => {
     const { provider, spans } = makeCapturingTracerProvider();
     const dispatcher = createDispatcher({
       email: memoryEmailAdapter(),
-      sms: memorySmsAdapter(),
+      messaging: memoryMessagingAdapter(),
       tracerProvider: provider,
     });
     await dispatcher.email({ subject: "s", text: "t", to: "a@b.c" });
-    await dispatcher.sms({ body: "b", to: "+1" });
+    await dispatcher.messaging({
+      content: { kind: "text", text: "b" },
+      to: { address: "+1", transport: "sms" },
+    });
     const names = spans.map((s) => s.name);
     expect(names).toContain("dispatch.email.send");
-    expect(names).toContain("dispatch.sms.send");
+    expect(names).toContain("dispatch.messaging.send");
   });
 
   test("email arrays expose only a privacy-safe recipient count", async () => {

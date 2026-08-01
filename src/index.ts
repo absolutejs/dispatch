@@ -13,10 +13,10 @@
  *
  * **The shape this package provides.** One factory
  * (`createDispatcher`) returning a `Dispatcher` with three channels
- * (`email` / `sms` / `push`). Each channel takes an adapter — bundled
- * in core: `memoryEmailAdapter` / `memorySmsAdapter` / `memoryPushAdapter`
+ * (`email` / `messaging` / `push`). Each channel takes an adapter — bundled
+ * in core: `memoryEmailAdapter` / `memoryMessagingAdapter` / `memoryPushAdapter`
  * (in-process tail; useful in tests) and `consoleEmailAdapter` /
- * `consoleSmsAdapter` / `consolePushAdapter` (log to stdout for dev).
+ * `consoleMessagingAdapter` / `consolePushAdapter` (log to stdout for dev).
  * Provider-specific adapters live as siblings in
  * `@absolutejs/dispatch-adapters/*` (`dispatch-resend`, `dispatch-postmark`,
  * `dispatch-twilio`, etc.) — same pattern as audit-adapters and
@@ -101,28 +101,56 @@ export type EmailMessage = {
   metadata?: Record<string, unknown>;
 };
 
-export type SmsMessage = {
-  /** Messaging transport. Defaults to SMS. */
-  channel?: "mms" | "rcs" | "sms" | "whatsapp";
-  /** E.164 phone number, `whatsapp:+...`, or `rcs:+...` to require RCS. */
-  to: string;
-  /** E.164 origination number or channel-specific sender address. */
-  from?: string;
-  body?: string;
-  /** Provider-hosted media URLs for MMS or channel media. */
-  mediaUrls?: ReadonlyArray<string>;
-  /** Provider-neutral template reference and variables. */
-  template?: {
-    id: string;
-    variables?: Readonly<Record<string, string>>;
-  };
-  /** RCS delivery behavior. Omit to let the provider fall back to SMS/MMS. */
-  rcs?: {
-    /** Disable fallback to SMS/MMS when the recipient cannot receive RCS. */
-    fallback?: "automatic" | "disabled";
-    /** E.164 sender used for automatic SMS/MMS fallback. */
-    fallbackFrom?: string;
-  };
+export type MessagingTransport = "mms" | "rcs" | "sms" | "whatsapp";
+
+export type MessagingEndpoint = {
+  address: string;
+  transport: MessagingTransport;
+};
+
+export type MessagingAction =
+  | { kind: "dial"; label: string; phoneNumber: string }
+  | { kind: "location"; label: string; latitude: number; longitude: number }
+  | { kind: "reply"; label: string; payload: string }
+  | { kind: "url"; label: string; url: string };
+
+export type MessagingContent =
+  | { kind: "text"; text: string }
+  | {
+      kind: "media";
+      mediaUrls: ReadonlyArray<string>;
+      subject?: string;
+      text?: string;
+    }
+  | {
+      kind: "template";
+      id: string;
+      variables?: Readonly<Record<string, string>>;
+    }
+  | {
+      actions?: ReadonlyArray<MessagingAction>;
+      extensions?: Readonly<Record<string, unknown>>;
+      kind: "rich";
+      mediaUrl?: string;
+      text: string;
+      title?: string;
+    };
+
+export type MessagingFallbackRoute = {
+  content?: MessagingContent;
+  from?: MessagingEndpoint;
+  transport: Exclude<MessagingTransport, "rcs">;
+};
+
+export type MessagingMessage = {
+  /** Typed primary recipient and requested transport. */
+  to: MessagingEndpoint;
+  /** Typed primary sender. Providers may select one from a configured pool when omitted. */
+  from?: MessagingEndpoint;
+  /** Exactly one portable content representation. */
+  content: MessagingContent;
+  /** Ordered provider fallback routes. Consent is evaluated for every route automatically. */
+  fallbacks?: ReadonlyArray<MessagingFallbackRoute>;
   /** ISO-8601 delivery time for providers that support native scheduling. */
   sendAt?: string;
   /** Stable adapter idempotency key for retry-safe delivery. */
@@ -132,15 +160,15 @@ export type SmsMessage = {
     addressRetention?: "obfuscate" | "retain";
     contentRetention?: "discard" | "retain";
   };
-  /** Consent scope evaluated by an installed dispatch policy before sending. */
+  /** Consent identity evaluated for the primary and every fallback route. */
   consent?: {
     /** Stable messaging program identity across provider accounts and sender pools. */
     programId: string;
     /** Consent purpose, such as `incident-alerts` or `login-verification`. */
     purpose: string;
-    /** Every transport that may ultimately deliver the message, including fallbacks. */
-    deliveryTransports: ReadonlyArray<"mms" | "rcs" | "sms" | "whatsapp">;
   };
+  /** Typed provider extensions, keyed by provider name. */
+  extensions?: Readonly<Record<string, unknown>>;
   tenant?: string;
   metadata?: Record<string, unknown>;
 };
@@ -164,7 +192,7 @@ export type PushMessage = {
   metadata?: Record<string, unknown>;
 };
 
-export type DispatchChannel = "email" | "sms" | "push";
+export type DispatchChannel = "email" | "messaging" | "push";
 
 /**
  * Returned by every `send` on every adapter. `id` is the provider's
@@ -175,6 +203,9 @@ export type DispatchResult = {
   id?: string;
   provider: string;
   at: number;
+  requestedTransport?: MessagingTransport;
+  actualTransport?: MessagingTransport;
+  fallbackAttempted?: boolean;
 };
 
 // -----------------------------------------------------------------------------
@@ -186,8 +217,8 @@ export type EmailAdapter = {
   readonly name: string;
 };
 
-export type SmsAdapter = {
-  send: (message: SmsMessage) => Promise<DispatchResult>;
+export type MessagingAdapter = {
+  send: (message: MessagingMessage) => Promise<DispatchResult>;
   readonly name: string;
 };
 
@@ -199,7 +230,7 @@ export type PushAdapter = {
 export type DispatchPolicyContext = {
   adapter: string;
   channel: DispatchChannel;
-  message: EmailMessage | SmsMessage | PushMessage;
+  message: EmailMessage | MessagingMessage | PushMessage;
 };
 
 export type DispatchPolicyDecision =
@@ -231,7 +262,7 @@ export class DispatchPolicyDeniedError extends Error {
 
 export type DispatcherOptions = {
   email?: EmailAdapter;
-  sms?: SmsAdapter;
+  messaging?: MessagingAdapter;
   push?: PushAdapter;
   /** Ordered authorization policies evaluated before any provider call. */
   policies?: ReadonlyArray<DispatchPolicy>;
@@ -242,7 +273,7 @@ export type DispatcherOptions = {
    */
   defaultFrom?: {
     email?: string;
-    sms?: string;
+    messaging?: MessagingEndpoint;
   };
   /**
    * Per-send error hook. Defaults to `console.warn`. Fires AFTER the
@@ -251,7 +282,7 @@ export type DispatcherOptions = {
   onError?: (
     error: unknown,
     channel: DispatchChannel,
-    message: EmailMessage | SmsMessage | PushMessage,
+    message: EmailMessage | MessagingMessage | PushMessage,
   ) => void;
   /**
    * Optional `@opentelemetry/api`-compatible `TracerProvider`. When
@@ -282,7 +313,7 @@ export type DispatcherMetrics = {
 
 export type Dispatcher = {
   email: (message: EmailMessage) => Promise<DispatchResult>;
-  sms: (message: SmsMessage) => Promise<DispatchResult>;
+  messaging: (message: MessagingMessage) => Promise<DispatchResult>;
   push: (message: PushMessage) => Promise<DispatchResult>;
   metrics: () => DispatcherMetrics;
 };
@@ -308,17 +339,19 @@ const toCsv = (
 
 const recipientOf = (
   channel: DispatchChannel,
-  message: EmailMessage | SmsMessage | PushMessage,
+  message: EmailMessage | MessagingMessage | PushMessage,
 ): string => {
   if (channel === "email") {
     return toCsv((message as EmailMessage).to) ?? "";
   }
-  return (message as SmsMessage | PushMessage).to;
+  return channel === "messaging"
+    ? (message as MessagingMessage).to.address
+    : (message as PushMessage).to;
 };
 
 const recipientCountOf = (
   channel: DispatchChannel,
-  message: EmailMessage | SmsMessage | PushMessage,
+  message: EmailMessage | MessagingMessage | PushMessage,
 ): number => {
   if (channel !== "email") return 1;
   const to = (message as EmailMessage).to;
@@ -327,7 +360,7 @@ const recipientCountOf = (
 
 const operationalTargetOf = (
   channel: DispatchChannel,
-  message: EmailMessage | SmsMessage | PushMessage,
+  message: EmailMessage | MessagingMessage | PushMessage,
 ) => {
   if (channel !== "push") return recipientOf(channel, message);
 
@@ -347,13 +380,13 @@ export const createDispatcher = (options: DispatcherOptions): Dispatcher => {
   const tracer = tracerOrNoop(options.tracerProvider, "@absolutejs/dispatch");
   const audit = options.audit;
   const defaultFromEmail = options.defaultFrom?.email;
-  const defaultFromSms = options.defaultFrom?.sms;
+  const defaultFromMessaging = options.defaultFrom?.messaging;
 
   const counters: DispatcherMetrics = {
     byChannel: {
       email: { failed: 0, sent: 0 },
       push: { failed: 0, sent: 0 },
-      sms: { failed: 0, sent: 0 },
+      messaging: { failed: 0, sent: 0 },
     },
     failed: 0,
     sent: 0,
@@ -361,7 +394,7 @@ export const createDispatcher = (options: DispatcherOptions): Dispatcher => {
 
   const emitAudit = (
     kind: string,
-    message: EmailMessage | SmsMessage | PushMessage,
+    message: EmailMessage | MessagingMessage | PushMessage,
     channel: DispatchChannel,
     result: DispatchResult | undefined,
     error: unknown | undefined,
@@ -391,12 +424,14 @@ export const createDispatcher = (options: DispatcherOptions): Dispatcher => {
       });
   };
 
-  const dispatch = async <M extends EmailMessage | SmsMessage | PushMessage>(
+  const dispatch = async <
+    M extends EmailMessage | MessagingMessage | PushMessage,
+  >(
     channel: DispatchChannel,
     message: M,
-    adapter: EmailAdapter | SmsAdapter | PushAdapter | undefined,
+    adapter: EmailAdapter | MessagingAdapter | PushAdapter | undefined,
     runSend: (
-      adapter: EmailAdapter | SmsAdapter | PushAdapter,
+      adapter: EmailAdapter | MessagingAdapter | PushAdapter,
     ) => Promise<DispatchResult>,
   ): Promise<DispatchResult> => {
     if (adapter === undefined) {
@@ -477,7 +512,7 @@ export const createDispatcher = (options: DispatcherOptions): Dispatcher => {
       byChannel: {
         email: { ...counters.byChannel.email },
         push: { ...counters.byChannel.push },
-        sms: { ...counters.byChannel.sms },
+        messaging: { ...counters.byChannel.messaging },
       },
       failed: counters.failed,
       sent: counters.sent,
@@ -486,11 +521,11 @@ export const createDispatcher = (options: DispatcherOptions): Dispatcher => {
       dispatch("push", message, options.push, (adapter) =>
         (adapter as PushAdapter).send(message),
       ),
-    sms: (message) =>
-      dispatch("sms", message, options.sms, (adapter) =>
-        (adapter as SmsAdapter).send({
+    messaging: (message) =>
+      dispatch("messaging", message, options.messaging, (adapter) =>
+        (adapter as MessagingAdapter).send({
           ...message,
-          from: message.from ?? defaultFromSms,
+          from: message.from ?? defaultFromMessaging,
         }),
       ),
   };
@@ -543,16 +578,16 @@ export const memoryEmailAdapter = (
   };
 };
 
-export type MemorySmsAdapter = SmsAdapter & {
-  inspect: () => ReadonlyArray<SmsMessage & { id: string; at: number }>;
+export type MemoryMessagingAdapter = MessagingAdapter & {
+  inspect: () => ReadonlyArray<MessagingMessage & { id: string; at: number }>;
   clear: () => void;
 };
 
-export const memorySmsAdapter = (
+export const memoryMessagingAdapter = (
   options: { max?: number } = {},
-): MemorySmsAdapter => {
+): MemoryMessagingAdapter => {
   const max = options.max ?? 1000;
-  const sent: Array<SmsMessage & { id: string; at: number }> = [];
+  const sent: Array<MessagingMessage & { id: string; at: number }> = [];
   return {
     clear: () => {
       sent.length = 0;
@@ -618,14 +653,14 @@ export const consoleEmailAdapter = (
   };
 };
 
-export const consoleSmsAdapter = (
+export const consoleMessagingAdapter = (
   options: ConsoleAdapterOptions = {},
-): SmsAdapter => {
+): MessagingAdapter => {
   const stream = options.stream ?? "log";
   return {
     name: "console",
     send: async (message) => {
-      const out = JSON.stringify({ channel: "sms", message }, null, 2);
+      const out = JSON.stringify({ channel: "messaging", message }, null, 2);
       if (stream === "error") console.error(out);
       else console.log(out);
       return { at: Date.now(), provider: "console" };

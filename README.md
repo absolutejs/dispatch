@@ -6,7 +6,7 @@ ecosystem.
 **Docs:** [absolutejs.com/documentation/dispatch-overview](https://absolutejs.com/documentation/dispatch-overview)
 
 **What it is.** One factory (`createDispatcher`) returning a
-`Dispatcher` with three channels (`email` / `sms` / `push`). Adapters
+`Dispatcher` with three channels (`email` / `messaging` / `push`). Adapters
 plug into each channel. The substrate around the adapters — metrics,
 OTel, audit emission, error handling — is uniform.
 
@@ -25,7 +25,8 @@ bun add @absolutejs/dispatch
 # Plus one or more adapter siblings:
 bun add @absolutejs/dispatch-resend       # Resend (email)
 bun add @absolutejs/dispatch-postmark     # Postmark (email)
-bun add @absolutejs/dispatch-twilio       # Twilio (SMS)
+bun add @absolutejs/dispatch-twilio       # Twilio messaging
+bun add @absolutejs/dispatch-telnyx       # Telnyx messaging
 # ...etc
 ```
 
@@ -58,20 +59,20 @@ await dispatcher.email({
 ```ts
 type DispatcherOptions = {
   email?: EmailAdapter;
-  sms?: SmsAdapter;
+  messaging?: MessagingAdapter;
   push?: PushAdapter;
   policies?: readonly DispatchPolicy[];
-  defaultFrom?: { email?: string; sms?: string };
+  defaultFrom?: { email?: string; messaging?: MessagingEndpoint };
   onError?: (error: unknown, channel: DispatchChannel, message) => void;
   tracerProvider?: TracerProvider; // OTel
   audit?: AuditLike; // @absolutejs/audit instance
 };
 ```
 
-Returns `{ email, sms, push, metrics }`. Calling a channel without an
+Returns `{ email, messaging, push, metrics }`. Calling a channel without an
 adapter throws `DispatchUnsupportedError`.
 
-### `dispatcher.email(message)` / `.sms(message)` / `.push(message)`
+### `dispatcher.email(message)` / `.messaging(message)` / `.push(message)`
 
 ```ts
 type EmailMessage = {
@@ -88,14 +89,34 @@ type EmailMessage = {
   metadata?: Record<string, unknown>; // adapter-specific extras
 };
 
-type SmsMessage = {
-  channel?: "sms" | "mms" | "whatsapp" | "rcs";
-  to: string; // E.164, whatsapp:+..., or rcs:+... to require RCS
-  from?: string;
-  body?: string;
-  mediaUrls?: readonly string[];
-  template?: { id: string; variables?: Readonly<Record<string, string>> };
-  rcs?: { fallback?: "automatic" | "disabled"; fallbackFrom?: string };
+type MessagingMessage = {
+  to: { address: string; transport: "sms" | "mms" | "rcs" | "whatsapp" };
+  from?: { address: string; transport: "sms" | "mms" | "rcs" | "whatsapp" };
+  content:
+    | { kind: "text"; text: string }
+    | {
+        kind: "media";
+        mediaUrls: readonly string[];
+        text?: string;
+        subject?: string;
+      }
+    | {
+        kind: "template";
+        id: string;
+        variables?: Readonly<Record<string, string>>;
+      }
+    | {
+        kind: "rich";
+        text: string;
+        title?: string;
+        mediaUrl?: string;
+        actions?: readonly MessagingAction[];
+      };
+  fallbacks?: readonly {
+    transport: "sms" | "mms" | "whatsapp";
+    from?: MessagingEndpoint;
+    content?: MessagingContent;
+  }[];
   sendAt?: string;
   idempotencyKey?: string;
   privacy?: {
@@ -105,8 +126,8 @@ type SmsMessage = {
   consent?: {
     programId: string;
     purpose: string;
-    deliveryTransports: readonly ("sms" | "mms" | "rcs" | "whatsapp")[];
   };
+  extensions?: Readonly<Record<string, unknown>>;
   tenant?: string;
   metadata?: Record<string, unknown>;
 };
@@ -121,7 +142,7 @@ type PushMessage = {
 };
 ```
 
-Returns `DispatchResult { id?, provider, at }`. Throws on adapter
+Returns `DispatchResult { id?, provider, at, requestedTransport?, actualTransport?, fallbackAttempted? }`. Throws on adapter
 failure; `onError` fires before re-throw.
 
 ### Pre-send authorization policies
@@ -133,13 +154,13 @@ messaging-consent policy.
 ```ts
 const dispatcher = createDispatcher({
   policies: [messagingConsentPolicy],
-  sms,
+  messaging,
 });
 
-await dispatcher.sms({
-  body: "Database latency is elevated",
-  consent: { senderId: "acme", topic: "incident-alerts" },
-  to: "+12025550100",
+await dispatcher.messaging({
+  content: { kind: "text", text: "Database latency is elevated" },
+  consent: { programId: "acme-alerts", purpose: "incident-alerts" },
+  to: { address: "+12025550100", transport: "sms" },
 });
 ```
 
@@ -153,7 +174,7 @@ await dispatcher.sms({
     email: {
       sent, failed;
     }
-    sms: {
+    messaging: {
       sent, failed;
     }
     push: {
@@ -171,7 +192,7 @@ When `tracerProvider` is set, every send emits a
 `dispatch.<channel>.send` span (`dispatch.email.send`, etc.) with:
 
 - `abs.tenant` (when `message.tenant` is supplied)
-- `dispatch.channel` (`email` / `sms` / `push`)
+- `dispatch.channel` (`email` / `messaging` / `push`)
 - `dispatch.provider` (the adapter name, updated to the result provider on success)
 - `dispatch.recipient_count` (addresses are intentionally excluded from spans)
 - `dispatch.message_id` (when the adapter returns one)
@@ -209,11 +230,11 @@ In-process FIFO tail. `inspect()` returns captured messages oldest-
 first; `clear()` empties. Useful for asserting "did we email Alice
 when she signed up?" in tests without a real SMTP server.
 
-### `memorySmsAdapter({ max? })` / `memoryPushAdapter({ max? })`
+### `memoryMessagingAdapter({ max? })` / `memoryPushAdapter({ max? })`
 
 Same shape, same usage.
 
-### `consoleEmailAdapter({ stream? })` / `consoleSmsAdapter` / `consolePushAdapter`
+### `consoleEmailAdapter({ stream? })` / `consoleMessagingAdapter` / `consolePushAdapter`
 
 JSON-per-line to stdout (or stderr). Useful for `bun --watch` dev so
 you can see exactly what would be sent without burning provider
