@@ -1,6 +1,6 @@
 {
   "name": "@absolutejs/dispatch",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Provider-agnostic outbound dispatcher for email, carrier and rich messaging, and push notifications in the AbsoluteJS ecosystem.",
   "repository": {
     "type": "git",
@@ -36,7 +36,7 @@
     "release": "bun run format && bun run build && bun publish"
   },
   "dependencies": {
-    "@absolutejs/telemetry": "^0.2.0",
+    "@absolutejs/telemetry": "^0.3.0",
     "@absolutejs/manifest": "^0.7.2",
     "@sinclair/typebox": "^0.34.0"
   },

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.2 — 2026-08-07
+
+- Accepts the shared `@absolutejs/telemetry` 0.3 runtime line.
+
 ## 0.7.1 — 2026-08-01
 
 - Finalize fenced push fanout claims so ambiguous terminal delivery failures are
