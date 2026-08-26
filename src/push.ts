@@ -28,6 +28,29 @@ export type RegisterPushSubscriptionInput = {
   userId: string;
 };
 
+export type RegisterPushInstallationInput = Omit<
+  RegisterPushSubscriptionInput,
+  "deviceId" | "id"
+> & {
+  /** Opaque server-issued installation identity, absent on first registration. */
+  installationId?: string;
+};
+
+export type RemovePushInstallationInput = {
+  installationId: string;
+  tenant: string;
+  userId: string;
+};
+
+export class PushInstallationOwnershipError extends Error {
+  constructor(
+    message = "Push installation does not belong to this principal.",
+  ) {
+    super(message);
+    this.name = "PushInstallationOwnershipError";
+  }
+}
+
 export type PushSubscriptionQuery = {
   deviceId?: string;
   ids?: ReadonlyArray<string>;
@@ -202,6 +225,60 @@ export const createPushLifecycle = (options: CreatePushLifecycleOptions) => {
     });
   };
 
+  const registerInstallation = async (
+    input: RegisterPushInstallationInput,
+  ): Promise<{ installationId: string; subscription: PushSubscription }> => {
+    const tenant = nonEmpty("tenant", input.tenant);
+    const userId = nonEmpty("userId", input.userId);
+    const suppliedInstallation = input.installationId
+      ? nonEmpty("installationId", input.installationId)
+      : undefined;
+    const installationId = suppliedInstallation ?? idGenerator();
+    const existing = suppliedInstallation
+      ? await options.store.list({ deviceId: installationId, tenant })
+      : [];
+    if (
+      suppliedInstallation &&
+      (existing.length === 0 || existing.some((item) => item.userId !== userId))
+    )
+      throw new PushInstallationOwnershipError();
+    const current = existing.find((item) => item.platform === input.platform);
+    const subscription = await register({
+      deviceId: installationId,
+      ...(current ? { id: current.id } : {}),
+      ...(input.locale ? { locale: input.locale } : {}),
+      platform: input.platform,
+      tenant,
+      token: input.token,
+      topics: input.topics,
+      userId,
+    });
+    await Promise.all(
+      existing
+        .filter((item) => item.id !== subscription.id)
+        .map((item) => options.store.remove({ id: item.id, tenant })),
+    );
+
+    return { installationId, subscription };
+  };
+
+  const removeInstallation = async (
+    input: RemovePushInstallationInput,
+  ): Promise<void> => {
+    const tenant = nonEmpty("tenant", input.tenant);
+    const userId = nonEmpty("userId", input.userId);
+    const installationId = nonEmpty("installationId", input.installationId);
+    const existing = await options.store.list({
+      deviceId: installationId,
+      tenant,
+    });
+    if (existing.some((item) => item.userId !== userId))
+      throw new PushInstallationOwnershipError();
+    await Promise.all(
+      existing.map((item) => options.store.remove({ id: item.id, tenant })),
+    );
+  };
+
   const sendOne = async (
     subscription: PushSubscription,
     message: Omit<PushMessage, "safeTarget" | "tenant" | "to">,
@@ -313,8 +390,10 @@ export const createPushLifecycle = (options: CreatePushLifecycleOptions) => {
 
   return {
     register,
+    registerInstallation,
     remove: (input: { id: string; tenant: string }) =>
       options.store.remove(input),
+    removeInstallation,
     send,
   };
 };

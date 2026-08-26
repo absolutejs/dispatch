@@ -176,6 +176,17 @@ await push.register({
   userId: "user-42",
 });
 
+// Authenticated native apps use server-issued installation identities. Pass
+// this lifecycle directly as Auth's nativePush registrar; ownership is checked
+// on every token rotation and removal.
+const installation = await push.registerInstallation({
+  platform: "apns",
+  tenant: "acme",
+  token,
+  topics: ["incidents"],
+  userId: "user-42",
+});
+
 await push.send(
   { tenant: "acme", topic: "incidents" },
   {

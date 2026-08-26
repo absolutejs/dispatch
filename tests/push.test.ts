@@ -3,10 +3,75 @@ import {
   createPushLifecycle,
   memoryPushFanoutClaimStore,
   memoryPushSubscriptionStore,
+  PushInstallationOwnershipError,
   type PushAdapter,
 } from "../src";
 
 describe("push lifecycle", () => {
+  test("owns server-issued installation rotation and removal", async () => {
+    const store = memoryPushSubscriptionStore();
+    let id = 0;
+    const lifecycle = createPushLifecycle({
+      adapterFor: () => ({
+        name: "test",
+        send: async () => ({ at: 1, provider: "test" }),
+      }),
+      idGenerator: () => `server-${++id}`,
+      store,
+    });
+    const created = await lifecycle.registerInstallation({
+      platform: "fcm",
+      tenant: "tenant-a",
+      token: "token-1",
+      topics: ["incidents"],
+      userId: "user-1",
+    });
+    expect(created.installationId).toBe("server-1");
+    expect(store.inspect()).toEqual([
+      expect.objectContaining({
+        deviceId: "server-1",
+        token: "token-1",
+        userId: "user-1",
+      }),
+    ]);
+
+    await lifecycle.registerInstallation({
+      installationId: created.installationId,
+      platform: "fcm",
+      tenant: "tenant-a",
+      token: "token-rotated",
+      userId: "user-1",
+    });
+    expect(store.inspect()).toHaveLength(1);
+    expect(store.inspect()[0]).toMatchObject({
+      deviceId: "server-1",
+      token: "token-rotated",
+    });
+    await expect(
+      lifecycle.registerInstallation({
+        installationId: created.installationId,
+        platform: "fcm",
+        tenant: "tenant-a",
+        token: "attacker-token",
+        userId: "user-2",
+      }),
+    ).rejects.toBeInstanceOf(PushInstallationOwnershipError);
+    await expect(
+      lifecycle.removeInstallation({
+        installationId: created.installationId,
+        tenant: "tenant-a",
+        userId: "user-2",
+      }),
+    ).rejects.toBeInstanceOf(PushInstallationOwnershipError);
+
+    await lifecycle.removeInstallation({
+      installationId: created.installationId,
+      tenant: "tenant-a",
+      userId: "user-1",
+    });
+    expect(store.inspect()).toEqual([]);
+  });
+
   test("targets users and topics without crossing tenants", async () => {
     const store = memoryPushSubscriptionStore();
     const sent: string[] = [];
