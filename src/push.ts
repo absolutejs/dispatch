@@ -1,40 +1,51 @@
 import type { DispatchResult, PushAdapter, PushMessage } from "./index";
 
-export type PushPlatform = "apns" | "fcm";
+export type PushPlatform = "apns" | "fcm" | "webpush";
 
-export type PushSubscription = {
+export type WebPushSubscriptionCredential = {
+  endpoint: string;
+  keys: { auth: string; p256dh: string };
+};
+
+type PushProviderCredential =
+  | { platform: "apns" | "fcm"; token: string }
+  | { platform: "webpush"; subscription: WebPushSubscriptionCredential };
+
+type PushSubscriptionBase = {
   createdAt: number;
   deviceId: string;
   enabled: boolean;
   id: string;
   lastSeenAt: number;
   locale?: string;
-  platform: PushPlatform;
   tenant: string;
-  token: string;
   topics: ReadonlyArray<string>;
   updatedAt: number;
   userId: string;
 };
 
-export type RegisterPushSubscriptionInput = {
+export type PushSubscription = PushSubscriptionBase & PushProviderCredential;
+
+type RegisterPushSubscriptionBase = {
   deviceId: string;
   id?: string;
   locale?: string;
-  platform: PushPlatform;
   tenant: string;
-  token: string;
   topics?: ReadonlyArray<string>;
   userId: string;
 };
 
+export type RegisterPushSubscriptionInput = RegisterPushSubscriptionBase &
+  PushProviderCredential;
+
 export type RegisterPushInstallationInput = Omit<
-  RegisterPushSubscriptionInput,
+  RegisterPushSubscriptionBase,
   "deviceId" | "id"
-> & {
-  /** Opaque server-issued installation identity, absent on first registration. */
-  installationId?: string;
-};
+> &
+  PushProviderCredential & {
+    /** Opaque server-issued installation identity, absent on first registration. */
+    installationId?: string;
+  };
 
 export type RemovePushInstallationInput = {
   installationId: string;
@@ -132,6 +143,40 @@ const nonEmpty = (name: string, value: string) => {
 const normalizedTopics = (topics: ReadonlyArray<string> | undefined) =>
   [...new Set((topics ?? []).map((topic) => nonEmpty("topic", topic)))].sort();
 
+const webPushSubscription = (
+  value: WebPushSubscriptionCredential,
+): WebPushSubscriptionCredential => {
+  let endpoint: URL;
+  try {
+    endpoint = new URL(value.endpoint);
+  } catch {
+    throw new Error("[dispatch] web push endpoint must be a valid URL");
+  }
+  if (endpoint.protocol !== "https:")
+    throw new Error("[dispatch] web push endpoint must use HTTPS");
+
+  return {
+    endpoint: endpoint.toString(),
+    keys: {
+      auth: nonEmpty("web push auth key", value.keys.auth),
+      p256dh: nonEmpty("web push p256dh key", value.keys.p256dh),
+    },
+  };
+};
+
+const providerCredential = (input: PushProviderCredential) =>
+  input.platform === "webpush"
+    ? {
+        platform: input.platform,
+        subscription: webPushSubscription(input.subscription),
+      }
+    : { platform: input.platform, token: nonEmpty("token", input.token) };
+
+const credentialIdentity = (subscription: PushSubscription) =>
+  subscription.platform === "webpush"
+    ? subscription.subscription.endpoint
+    : subscription.token;
+
 const statusOf = (error: unknown) =>
   typeof error === "object" && error !== null && "status" in error
     ? Number((error as { status?: unknown }).status)
@@ -184,7 +229,7 @@ const fanoutMessage = (
   ...message,
   safeTarget: subscription.id,
   tenant: subscription.tenant,
-  to: subscription.token,
+  to: credentialIdentity(subscription),
 });
 
 export const createPushLifecycle = (options: CreatePushLifecycleOptions) => {
@@ -216,9 +261,8 @@ export const createPushLifecycle = (options: CreatePushLifecycleOptions) => {
       id: input.id ? nonEmpty("id", input.id) : idGenerator(),
       lastSeenAt: now,
       ...(input.locale ? { locale: input.locale } : {}),
-      platform: input.platform,
+      ...providerCredential(input),
       tenant: nonEmpty("tenant", input.tenant),
-      token: nonEmpty("token", input.token),
       topics: normalizedTopics(input.topics),
       updatedAt: now,
       userId: nonEmpty("userId", input.userId),
@@ -247,9 +291,10 @@ export const createPushLifecycle = (options: CreatePushLifecycleOptions) => {
       deviceId: installationId,
       ...(current ? { id: current.id } : {}),
       ...(input.locale ? { locale: input.locale } : {}),
-      platform: input.platform,
+      ...(input.platform === "webpush"
+        ? { platform: input.platform, subscription: input.subscription }
+        : { platform: input.platform, token: input.token }),
       tenant,
-      token: input.token,
       topics: input.topics,
       userId,
     });
@@ -432,7 +477,7 @@ export const memoryPushSubscriptionStore = (): PushSubscriptionStore & {
         (item) =>
           item.tenant === subscription.tenant &&
           item.platform === subscription.platform &&
-          item.token === subscription.token,
+          credentialIdentity(item) === credentialIdentity(subscription),
       );
       const existing =
         duplicate ?? records.get(key(subscription.tenant, subscription.id));

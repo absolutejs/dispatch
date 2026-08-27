@@ -149,8 +149,8 @@ type PushMessage = {
 
 ### Production push lifecycle
 
-`createPushLifecycle()` owns the provider-neutral device layer above APNs and
-FCM: tenant-isolated registration, user/device/topic targeting, bounded
+`createPushLifecycle()` owns the provider-neutral device layer above APNs,
+FCM, and Web Push: tenant-isolated registration, user/device/topic targeting, bounded
 concurrency, retries, invalid-token retirement, and idempotent fanout. Resolve
 the adapter per subscription to support tenant-specific credentials.
 
@@ -176,13 +176,24 @@ await push.register({
   userId: "user-42",
 });
 
-// Authenticated native apps use server-issued installation identities. Pass
-// this lifecycle directly as Auth's nativePush registrar; ownership is checked
-// on every token rotation and removal.
+// Authenticated apps use server-issued installation identities. Pass this
+// lifecycle directly as Auth's push registrar; ownership is checked on every
+// native-token or browser-subscription rotation and removal.
 const installation = await push.registerInstallation({
   platform: "apns",
   tenant: "acme",
   token,
+  topics: ["incidents"],
+  userId: "user-42",
+});
+
+await push.registerInstallation({
+  platform: "webpush",
+  subscription: {
+    endpoint: "https://push.example/subscription-id",
+    keys: { auth: "browser-auth-key", p256dh: "browser-public-key" },
+  },
+  tenant: "acme",
   topics: ["incidents"],
   userId: "user-42",
 });

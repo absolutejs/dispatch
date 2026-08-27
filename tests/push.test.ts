@@ -112,6 +112,51 @@ describe("push lifecycle", () => {
     expect(sent).toEqual(["token-a"]);
   });
 
+  test("keeps structured Web Push credentials out of native token fields", async () => {
+    const store = memoryPushSubscriptionStore();
+    const seen: unknown[] = [];
+    const lifecycle = createPushLifecycle({
+      adapterFor: (subscription) => {
+        seen.push(subscription);
+        return {
+          name: "webpush",
+          send: async (message) => ({
+            at: 1,
+            id: message.to,
+            provider: "webpush",
+          }),
+        };
+      },
+      idGenerator: () => "web-installation",
+      store,
+    });
+    await lifecycle.registerInstallation({
+      platform: "webpush",
+      subscription: {
+        endpoint: "https://push.example/subscription-1",
+        keys: { auth: "auth-key", p256dh: "p256dh-key" },
+      },
+      tenant: "tenant-a",
+      userId: "user-1",
+    });
+    const result = await lifecycle.send(
+      { tenant: "tenant-a", userId: "user-1" },
+      { body: "Ready" },
+    );
+
+    expect(result.delivered).toBe(1);
+    expect(seen).toEqual([
+      expect.objectContaining({
+        platform: "webpush",
+        subscription: {
+          endpoint: "https://push.example/subscription-1",
+          keys: { auth: "auth-key", p256dh: "p256dh-key" },
+        },
+      }),
+    ]);
+    expect(store.inspect()[0]).not.toHaveProperty("token");
+  });
+
   test("deduplicates fanout and retires invalid registrations", async () => {
     const store = memoryPushSubscriptionStore();
     const claims = memoryPushFanoutClaimStore();
