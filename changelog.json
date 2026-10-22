@@ -1,5 +1,17 @@
 {
 	"contract": 1,
 	"name": "@absolutejs/dispatch",
-	"releases": []
+	"releases": [
+		{
+			"changes": [
+				{
+					"detail": "dispatch required `@absolutejs/telemetry ^0.2.0`, so an app that also used a package needing telemetry 0.3 (such as `@absolutejs/secrets` 0.9.7) installed two copies. telemetry 0.3.0 only added trace storage; dispatch now accepts any telemetry from 0.2.0 below 0.4.0, like queue, sync, rate-limit and audit-elysia.",
+					"kind": "changed",
+					"summary": "Accepts @absolutejs/telemetry 0.3"
+				}
+			],
+			"date": "2026-10-22",
+			"version": "0.9.1"
+		}
+	]
 }
